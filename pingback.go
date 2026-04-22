@@ -117,6 +117,8 @@ func (p *Pingback) Handler() http.Handler {
 			DurationMs: durationMs,
 		}
 
+		w.Header().Set("Content-Type", "application/json")
+
 		if handlerErr != nil {
 			resp.Status = "error"
 			resp.Error = handlerErr.Error()
@@ -124,10 +126,7 @@ func (p *Pingback) Handler() http.Handler {
 		} else {
 			resp.Status = "success"
 			resp.Result = result
-			w.WriteHeader(http.StatusOK)
 		}
-
-		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Printf("[pingback] failed to encode response: %v", err)
 		}
