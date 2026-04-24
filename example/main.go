@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	pingback "github.com/champ3oy/pingback-go"
+	pingback "github.com/runpingback/pingback-go"
 )
 
 func main() {

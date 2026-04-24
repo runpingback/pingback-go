@@ -5,7 +5,7 @@ Go SDK for [Pingback](https://pingback.lol) — reliable cron jobs and backgroun
 ## Installation
 
 ```bash
-go get github.com/champ3oy/pingback-go
+go get github.com/runpingback/pingback-go
 ```
 
 ## Quick Start
@@ -18,7 +18,7 @@ import (
     "net/http"
     "os"
 
-    pingback "github.com/champ3oy/pingback-go"
+    pingback "github.com/runpingback/pingback-go"
 )
 
 func main() {
