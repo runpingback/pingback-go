@@ -87,6 +87,39 @@ pb.Cron("send-emails", "*/15 * * * *", func(ctx *pingback.Context) (any, error) 
 })
 ```
 
+### Workflows (Task Chaining)
+
+Tasks can call `ctx.Task()` to chain into multi-step workflows with branching:
+
+```go
+pb.Task("validate-order", func(ctx *pingback.Context) (any, error) {
+    var p Order
+    json.Unmarshal(ctx.Payload, &p)
+    ctx.Log("Validating", "orderId", p.OrderID)
+
+    if p.Amount <= 0 {
+        ctx.Task("notify-failure", map[string]any{
+            "orderId": p.OrderID, "reason": "Invalid amount",
+        })
+        return map[string]bool{"valid": false}, nil
+    }
+
+    ctx.Task("charge-payment", p)
+    return map[string]bool{"valid": true}, nil
+}, pingback.WithRetries(2))
+
+pb.Task("charge-payment", func(ctx *pingback.Context) (any, error) {
+    var p Order
+    json.Unmarshal(ctx.Payload, &p)
+    charge := stripe.Charge(p.Amount)
+    ctx.Log("Charged", "chargeId", charge.ID)
+    ctx.Task("send-confirmation", p)
+    return nil, nil
+}, pingback.WithRetries(3))
+```
+
+Each step runs as its own execution with independent retries and logging. The workflow graph in your dashboard visualizes the full chain.
+
 ## Programmatic Triggering
 
 ```go
