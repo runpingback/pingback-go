@@ -41,6 +41,8 @@ func main() {
         return nil, nil
     }, pingback.WithTimeout("15s"))
 
+    pb.Register() // register all functions with the platform
+
     http.Handle("/api/pingback", pb.Handler())
     http.ListenAndServe(":8080", nil)
 }
@@ -168,9 +170,9 @@ PINGBACK_CRON_SECRET=...            # From your Pingback project settings
 
 ## How It Works
 
-1. You define cron jobs and tasks with `pb.Cron()` and `pb.Task()`
-2. Mount the handler with `http.Handle("/api/pingback", pb.Handler())`
-3. On first request, the SDK registers your functions with the Pingback platform
+1. Define cron jobs and tasks with `pb.Cron()` and `pb.Task()`
+2. Call `pb.Register()` to register all functions with the Pingback platform
+3. Mount the handler with `http.Handle("/api/pingback", pb.Handler())`
 4. The platform sends signed HTTP requests to your handler when jobs are due
 5. The handler verifies the HMAC signature, executes the function, and returns results
-6. Fan-out tasks are dispatched independently by the platform
+6. Fan-out tasks and workflow chains are dispatched independently by the platform

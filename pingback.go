@@ -66,14 +66,18 @@ func (p *Pingback) Task(name string, handler HandlerFunc, opts ...FuncOption) {
 	}
 }
 
-// Handler returns an http.Handler that processes execution requests.
-// On the first call, it registers all functions with the platform.
-func (p *Pingback) Handler() http.Handler {
+// Register registers all functions with the Pingback platform.
+// Call this after defining all cron jobs and tasks, before starting the server.
+func (p *Pingback) Register() {
 	p.once.Do(func() {
 		if p.apiKey != "" {
-			go p.register()
+			p.register()
 		}
 	})
+}
+
+// Handler returns an http.Handler that processes execution requests.
+func (p *Pingback) Handler() http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

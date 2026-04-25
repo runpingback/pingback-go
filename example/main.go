@@ -169,6 +169,9 @@ func main() {
 		return map[string]any{"notified": true, "orderId": p.OrderID}, nil
 	}, pingback.WithRetries(2), pingback.WithTimeout("15s"))
 
+	// Register all functions with the platform
+	pb.Register()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
