@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -54,23 +53,18 @@ func main() {
 		return map[string]int{"dispatched": len(emails)}, nil
 	})
 
-	// Task: send a single email (triggered via fan-out or programmatically)
-	pb.Task("send-email", func(ctx *pingback.Context) (any, error) {
-		var payload struct {
-			To string `json:"to"`
-		}
-		if err := json.Unmarshal(ctx.Payload, &payload); err != nil {
-			ctx.Error("Failed to parse payload", "error", err.Error())
-			return nil, err
-		}
+	// Task: send a single email — using typed payload
+	type EmailPayload struct {
+		To string `json:"to"`
+	}
+	pingback.TaskWith(pb, "send-email", func(ctx *pingback.Context, payload EmailPayload) (any, error) {
 		ctx.Log("Sending email", "to", payload.To)
-		// Simulate sending
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // simulate
 		ctx.Log("Email sent", "to", payload.To)
 		return map[string]string{"sent": payload.To}, nil
 	}, pingback.WithRetries(3), pingback.WithTimeout("15s"))
 
-	// Task: process a webhook
+	// Task: process a webhook (untyped — uses ctx.Payload directly)
 	pb.Task("process-webhook", func(ctx *pingback.Context) (any, error) {
 		ctx.Log("Processing webhook", "executionId", ctx.ExecutionID)
 		ctx.Debug("Raw payload", "bytes", len(ctx.Payload))
@@ -79,13 +73,31 @@ func main() {
 
 	// --- Workflow chain: process-orders → validate-order → charge-payment → send-confirmation ---
 
+	type Order struct {
+		OrderID string  `json:"orderId"`
+		Amount  float64 `json:"amount"`
+		Email   string  `json:"email"`
+	}
+
+	type Confirmation struct {
+		OrderID string  `json:"orderId"`
+		Email   string  `json:"email"`
+		Amount  float64 `json:"amount"`
+	}
+
+	type Failure struct {
+		OrderID string `json:"orderId"`
+		Email   string `json:"email"`
+		Reason  string `json:"reason"`
+	}
+
 	// Cron: find pending orders and kick off validation
 	pb.Cron("process-orders", "*/10 * * * *", func(ctx *pingback.Context) (any, error) {
 		ctx.Log("Checking for pending orders")
-		orders := []map[string]any{
-			{"orderId": "ord-001", "amount": 49.99, "email": "alice@example.com"},
-			{"orderId": "ord-002", "amount": 149.00, "email": "bob@example.com"},
-			{"orderId": "ord-003", "amount": 0, "email": "eve@example.com"},
+		orders := []Order{
+			{OrderID: "ord-001", Amount: 49.99, Email: "alice@example.com"},
+			{OrderID: "ord-002", Amount: 149.00, Email: "bob@example.com"},
+			{OrderID: "ord-003", Amount: 0, Email: "eve@example.com"},
 		}
 		for _, order := range orders {
 			ctx.Task("validate-order", order)
@@ -95,60 +107,31 @@ func main() {
 	}, pingback.WithRetries(1))
 
 	// Step 1: validate → charge-payment or notify-failure
-	pb.Task("validate-order", func(ctx *pingback.Context) (any, error) {
-		var order struct {
-			OrderID string  `json:"orderId"`
-			Amount  float64 `json:"amount"`
-			Email   string  `json:"email"`
-		}
-		json.Unmarshal(ctx.Payload, &order)
+	pingback.TaskWith(pb, "validate-order", func(ctx *pingback.Context, order Order) (any, error) {
 		ctx.Log("Validating order", "orderId", order.OrderID)
 
 		if order.Amount <= 0 {
 			ctx.Warn("Invalid order amount", "orderId", order.OrderID, "amount", order.Amount)
-			ctx.Task("notify-failure", map[string]any{
-				"orderId": order.OrderID,
-				"email":   order.Email,
-				"reason":  "Invalid amount",
-			})
+			ctx.Task("notify-failure", Failure{OrderID: order.OrderID, Email: order.Email, Reason: "Invalid amount"})
 			return map[string]any{"valid": false, "orderId": order.OrderID}, nil
 		}
 
 		ctx.Log("Order valid, proceeding to payment", "orderId", order.OrderID)
-		ctx.Task("charge-payment", map[string]any{
-			"orderId": order.OrderID,
-			"amount":  order.Amount,
-			"email":   order.Email,
-		})
+		ctx.Task("charge-payment", order)
 		return map[string]any{"valid": true, "orderId": order.OrderID}, nil
 	}, pingback.WithRetries(2), pingback.WithTimeout("15s"))
 
 	// Step 2: charge → send-confirmation
-	pb.Task("charge-payment", func(ctx *pingback.Context) (any, error) {
-		var p struct {
-			OrderID string  `json:"orderId"`
-			Amount  float64 `json:"amount"`
-			Email   string  `json:"email"`
-		}
-		json.Unmarshal(ctx.Payload, &p)
+	pingback.TaskWith(pb, "charge-payment", func(ctx *pingback.Context, p Order) (any, error) {
 		ctx.Log("Charging payment", "orderId", p.OrderID, "amount", p.Amount)
 		time.Sleep(50 * time.Millisecond) // simulate
 		ctx.Log("Payment charged", "orderId", p.OrderID)
-		ctx.Task("send-confirmation", map[string]any{
-			"orderId": p.OrderID,
-			"email":   p.Email,
-			"amount":  p.Amount,
-		})
+		ctx.Task("send-confirmation", Confirmation{OrderID: p.OrderID, Email: p.Email, Amount: p.Amount})
 		return map[string]any{"charged": true, "orderId": p.OrderID}, nil
 	}, pingback.WithRetries(3), pingback.WithTimeout("30s"))
 
 	// Step 3: send confirmation (end of chain)
-	pb.Task("send-confirmation", func(ctx *pingback.Context) (any, error) {
-		var p struct {
-			OrderID string `json:"orderId"`
-			Email   string `json:"email"`
-		}
-		json.Unmarshal(ctx.Payload, &p)
+	pingback.TaskWith(pb, "send-confirmation", func(ctx *pingback.Context, p Confirmation) (any, error) {
 		ctx.Log("Sending confirmation", "orderId", p.OrderID, "email", p.Email)
 		time.Sleep(20 * time.Millisecond) // simulate
 		ctx.Log("Confirmation sent", "orderId", p.OrderID)
@@ -156,13 +139,7 @@ func main() {
 	}, pingback.WithRetries(2), pingback.WithTimeout("15s"))
 
 	// Failure branch
-	pb.Task("notify-failure", func(ctx *pingback.Context) (any, error) {
-		var p struct {
-			OrderID string `json:"orderId"`
-			Email   string `json:"email"`
-			Reason  string `json:"reason"`
-		}
-		json.Unmarshal(ctx.Payload, &p)
+	pingback.TaskWith(pb, "notify-failure", func(ctx *pingback.Context, p Failure) (any, error) {
 		ctx.Error("Order failed, notifying customer", "orderId", p.OrderID, "reason", p.Reason)
 		time.Sleep(20 * time.Millisecond) // simulate
 		ctx.Log("Failure notification sent", "orderId", p.OrderID)
