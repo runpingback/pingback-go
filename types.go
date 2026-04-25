@@ -8,6 +8,9 @@ import (
 // HandlerFunc is the signature for cron and task handlers.
 type HandlerFunc func(ctx *Context) (any, error)
 
+// TypedHandlerFunc is the signature for handlers with a typed payload.
+type TypedHandlerFunc[T any] func(ctx *Context, payload T) (any, error)
+
 // Option configures the Pingback client.
 type Option func(*options)
 

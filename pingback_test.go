@@ -211,3 +211,56 @@ func TestRegister(t *testing.T) {
 		t.Fatalf("expected 2 functions, got %d", len(received.Functions))
 	}
 }
+
+func TestTaskWith_TypedPayload(t *testing.T) {
+	type EmailPayload struct {
+		To      string `json:"to"`
+		Subject string `json:"subject"`
+	}
+
+	pb := New("key", "secret")
+	TaskWith(pb, "send-email", func(ctx *Context, payload EmailPayload) (any, error) {
+		ctx.Log("Sending", "to", payload.To)
+		return map[string]string{"to": payload.To, "subject": payload.Subject}, nil
+	}, WithRetries(2))
+
+	body := `{"function":"send-email","executionId":"exec-1","attempt":1,"scheduledAt":"2026-04-22T03:00:00Z","payload":{"to":"alice@example.com","subject":"Hello"}}`
+	req := signedRequest(t, body, "secret")
+	rec := httptest.NewRecorder()
+	pb.Handler().ServeHTTP(rec, req)
+
+	var resp executionResult
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %s: %s", resp.Status, resp.Error)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	if string(result) != `{"subject":"Hello","to":"alice@example.com"}` {
+		t.Fatalf("unexpected result: %s", string(result))
+	}
+}
+
+func TestTaskWith_InvalidPayload(t *testing.T) {
+	type Payload struct {
+		Count int `json:"count"`
+	}
+
+	pb := New("key", "secret")
+	TaskWith(pb, "job", func(ctx *Context, payload Payload) (any, error) {
+		return payload.Count, nil
+	})
+
+	body := `{"function":"job","executionId":"exec-1","attempt":1,"scheduledAt":"2026-04-22T03:00:00Z","payload":"not-json-object"}`
+	req := signedRequest(t, body, "secret")
+	rec := httptest.NewRecorder()
+	pb.Handler().ServeHTTP(rec, req)
+
+	var resp executionResult
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if resp.Status != "error" {
+		t.Fatalf("expected error for invalid payload, got %s", resp.Status)
+	}
+}

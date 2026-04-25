@@ -67,14 +67,35 @@ pb.Task("process-upload", func(ctx *pingback.Context) (any, error) {
     var p UploadPayload
     json.Unmarshal(ctx.Payload, &p)
     result, err := processFile(p.FileID)
-    if err != nil {
-        ctx.Error("Processing failed", "fileId", p.FileID, "error", err.Error())
-        return nil, err
-    }
     ctx.Log("Processed file", "fileId", p.FileID)
-    return result, nil
+    return result, err
 }, pingback.WithRetries(2), pingback.WithTimeout("5m"))
 ```
+
+### Typed Payloads
+
+Use `TaskWith` (or `CronWith`) to define handlers with a typed payload parameter. The SDK automatically unmarshals the JSON payload into your struct:
+
+```go
+type EmailPayload struct {
+    To      string `json:"to"`
+    Subject string `json:"subject"`
+}
+
+pingback.TaskWith(pb, "send-email", func(ctx *pingback.Context, payload EmailPayload) (any, error) {
+    // payload.To, payload.Subject — already unmarshalled
+    ctx.Log("Sending email", "to", payload.To)
+    sendMail(payload.To, payload.Subject)
+    return map[string]bool{"sent": true}, nil
+}, pingback.WithRetries(3))
+```
+
+Both styles are supported:
+
+| Style | Registration | Payload access |
+|-------|-------------|----------------|
+| Untyped | `pb.Task("name", handler)` | `json.Unmarshal(ctx.Payload, &p)` |
+| Typed | `pingback.TaskWith[T](pb, "name", handler)` | `payload.Field` directly |
 
 ### Fan-Out
 

@@ -66,6 +66,33 @@ func (p *Pingback) Task(name string, handler HandlerFunc, opts ...FuncOption) {
 	}
 }
 
+// TaskWith registers a background task with a typed payload.
+// The payload is automatically unmarshalled from JSON into the specified type.
+func TaskWith[T any](p *Pingback, name string, handler TypedHandlerFunc[T], opts ...FuncOption) {
+	p.Task(name, func(ctx *Context) (any, error) {
+		var payload T
+		if ctx.Payload != nil {
+			if err := json.Unmarshal(ctx.Payload, &payload); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+			}
+		}
+		return handler(ctx, payload)
+	}, opts...)
+}
+
+// CronWith registers a cron job with a typed payload (useful for manually triggered crons with payloads).
+func CronWith[T any](p *Pingback, name, schedule string, handler TypedHandlerFunc[T], opts ...FuncOption) {
+	p.Cron(name, schedule, func(ctx *Context) (any, error) {
+		var payload T
+		if ctx.Payload != nil {
+			if err := json.Unmarshal(ctx.Payload, &payload); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal payload: %w", err)
+			}
+		}
+		return handler(ctx, payload)
+	}, opts...)
+}
+
 // Register registers all functions with the Pingback platform.
 // Call this after defining all cron jobs and tasks, before starting the server.
 func (p *Pingback) Register() {
