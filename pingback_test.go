@@ -264,3 +264,76 @@ func TestTaskWith_InvalidPayload(t *testing.T) {
 		t.Fatalf("expected error for invalid payload, got %s", resp.Status)
 	}
 }
+
+func TestTrigger_WithDelay(t *testing.T) {
+	var received triggerPayload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(triggerResponse{
+			ExecutionID: "exec-456",
+			Task:        "send-email",
+			ScheduledAt: "2026-04-27T15:15:00.000Z",
+		})
+	}))
+	defer server.Close()
+
+	pb := New("test-key", "secret", WithPlatformURL(server.URL))
+	execID, err := pb.Trigger(context.Background(), "send-email", map[string]string{"to": "a@b.com"}, WithDelay("15m"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if execID != "exec-456" {
+		t.Fatalf("expected exec-456, got %s", execID)
+	}
+	if received.Delay == nil {
+		t.Fatal("expected delay to be set")
+	}
+	if received.Delay != "15m" {
+		t.Fatalf("expected delay '15m', got '%v'", received.Delay)
+	}
+}
+
+func TestTrigger_WithIntDelay(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(triggerResponse{
+			ExecutionID: "exec-789",
+			Task:        "process",
+			ScheduledAt: "2026-04-27T15:15:00.000Z",
+		})
+	}))
+	defer server.Close()
+
+	pb := New("test-key", "secret", WithPlatformURL(server.URL))
+	_, err := pb.Trigger(context.Background(), "process", nil, WithDelay(900))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	delay, ok := received["delay"]
+	if !ok {
+		t.Fatal("expected delay in payload")
+	}
+	// JSON numbers decode as float64
+	if delay != float64(900) {
+		t.Fatalf("expected delay 900, got %v", delay)
+	}
+}
+
+func TestTrigger_WithoutDelay_OmitsField(t *testing.T) {
+	var received map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&received)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(triggerResponse{ExecutionID: "exec-000", Task: "quick"})
+	}))
+	defer server.Close()
+
+	pb := New("test-key", "secret", WithPlatformURL(server.URL))
+	pb.Trigger(context.Background(), "quick", nil)
+	if _, ok := received["delay"]; ok {
+		t.Fatal("expected no delay field when not specified")
+	}
+}

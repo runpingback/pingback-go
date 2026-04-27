@@ -151,7 +151,15 @@ pb := pingback.New(os.Getenv("PINGBACK_API_KEY"), os.Getenv("PINGBACK_CRON_SECRE
 execID, err := pb.Trigger(context.Background(), "send-email", map[string]string{
     "to": "user@example.com",
 })
+
+// With a delay — run 15 minutes from now
+execID, err := pb.Trigger(context.Background(), "send-email", payload, pingback.WithDelay("15m"))
+
+// Delay as seconds
+execID, err := pb.Trigger(context.Background(), "send-email", payload, pingback.WithDelay(900))
 ```
+
+Supported delay formats: integer (seconds), or a string like `"30s"`, `"15m"`, `"2h"`, `"1d"`, `"1d2h30m"`. Maximum delay: 30 days.
 
 ## Structured Logging
 

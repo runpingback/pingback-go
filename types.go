@@ -117,12 +117,25 @@ type registerOptions struct {
 type triggerPayload struct {
 	Task    string `json:"task"`
 	Payload any    `json:"payload,omitempty"`
+	Delay   any    `json:"delay,omitempty"`
+}
+
+// TriggerOption configures a trigger call.
+type TriggerOption func(*triggerPayload)
+
+// WithDelay sets a delay before the task executes.
+// Accepts an int (seconds) or a string ("15m", "2h30m", "1d").
+func WithDelay(delay any) TriggerOption {
+	return func(tp *triggerPayload) {
+		tp.Delay = delay
+	}
 }
 
 // triggerResponse is the JSON response from the trigger endpoint.
 type triggerResponse struct {
 	ExecutionID string `json:"executionId"`
 	Task        string `json:"task"`
+	ScheduledAt string `json:"scheduledAt,omitempty"`
 }
 
 // Context holds per-execution state passed to handlers.

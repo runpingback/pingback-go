@@ -165,8 +165,11 @@ func (p *Pingback) Handler() http.Handler {
 }
 
 // Trigger programmatically triggers a registered task by name.
-func (p *Pingback) Trigger(ctx context.Context, taskName string, payload any) (string, error) {
+func (p *Pingback) Trigger(ctx context.Context, taskName string, payload any, opts ...TriggerOption) (string, error) {
 	tp := triggerPayload{Task: taskName, Payload: payload}
+	for _, opt := range opts {
+		opt(&tp)
+	}
 	body, err := json.Marshal(tp)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal trigger payload: %w", err)
